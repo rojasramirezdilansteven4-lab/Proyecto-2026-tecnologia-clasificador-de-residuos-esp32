@@ -1,0 +1,117 @@
+fireware/main.ino
+#include <WiFi.h>
+#include <WebServer.h>
+#include <ESP32Servo.h>
+
+// --- CONFIGURA TU WIFI AQUÍ ---
+const char* ssid     = "DilanGael_2026-2G";
+const char* password = "Dafediga50";
+
+WebServer server(80);
+Servo sortingServo;
+
+// Pin GPIO donde conectarás la señal del servomotor (evita los pines 19 y 20 que son USB)
+const int servoPin = 18; 
+
+// HTML de la interfaz web para el celular o PC
+const char MAIN_page[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Identificador de Residuos - ESP32-S3</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f9; margin: 0; padding: 20px; }
+    h1 { color: #2c3e50; }
+    .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0px 4px 8px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+    .btn { display: block; width: 100%; padding: 15px; margin: 10px 0; font-size: 18px; color: white; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; }
+    .plastic { background-color: #f39c12; }
+    .paper { background-color: #3498db; }
+    .organic { background-color: #27ae60; }
+    .glass { background-color: #e74c3c; }
+    .reset { background-color: #7f8c8d; }
+    .btn:active { transform: scale(0.98); }
+    #status { margin-top: 15px; font-weight: bold; color: #333; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Clasificador de Residuos</h1>
+    <p>Selecciona el tipo de residuo:</p>
+    <button class="btn plastic" onclick="clasificar('Plastico', 30)">Plástico (Amarillo)</button>
+    <button class="btn paper" onclick="clasificar('Papel / Cartón', 75)">Papel y Cartón (Azul)</button>
+    <button class="btn organic" onclick="clasificar('Orgánico', 120)">Orgánico (Verde)</button>
+    <button class="btn glass" onclick="clasificar('Vidrio', 165)">Vidrio (Rojo)</button>
+    <button class="btn reset" onclick="clasificar('Centro', 90)">Reiniciar Compuerta</button>
+    <div id="status">Estado: Listo para operar</div>
+  </div>
+
+  <script>
+    function clasificar(tipo, angulo) {
+      document.getElementById("status").innerHTML = "Enviando a " + tipo + "...";
+      fetch('/mover?angulo=' + angulo)
+        .then(response => response.text())
+        .then(data => {
+          document.getElementById("status").innerHTML = "Compartimiento activo: " + tipo;
+        })
+        .catch(error => {
+          document.getElementById("status").innerHTML = "Error de comunicación";
+        });
+    }
+  </script>
+</body>
+</html>
+)rawliteral";
+
+void handleRoot() {
+  server.send(200, "text/html", MAIN_page);
+}
+
+void handleMover() {
+  if (server.hasArg("angulo")) {
+    int angulo = server.arg("angulo").toInt();
+    sortingServo.write(angulo);
+    Serial.print("Moviendo servo a: ");
+    Serial.print(angulo);
+    Serial.println(" grados");
+    server.send(200, "text/plain", "OK");
+  } else {
+    server.send(400, "text/plain", "Falta argumento");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000); // <--- ESTO DA TIEMPO PARA QUE EL USB CONECTE CON EL MONITOR SERIE
+  
+  // Configurar el servomotor
+  sortingServo.setPeriodHertz(50); 
+  sortingServo.attach(servoPin, 500, 2400); 
+  sortingServo.write(90); 
+
+  // Conexión WiFi
+  Serial.println();
+  Serial.print("Conectando a WiFi: ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\n¡Conectado!");
+  Serial.print("Dirección IP del Servidor: http://");
+  Serial.println(WiFi.localIP());
+
+  // Rutas del servidor web
+  server.on("/", handleRoot);
+  server.on("/mover", handleMover);
+
+  server.begin();
+  Serial.println("Servidor Web iniciado correctamente.");
+}
+
+void loop() {
+  server.handleClient();
+}
