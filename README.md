@@ -1,0 +1,1 @@
+# Proyecto-2026-tecnologia-clasificador-de-residuos-esp32
